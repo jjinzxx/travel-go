@@ -2,11 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:project1/core/models/itinerary_model.dart';
 
-
 class ItineraryCard extends StatelessWidget {
   final Itinerary itinerary; // 데이터 받기
   final VoidCallback? onTap; // 클릭했을 때 실행할 함수 (선택 사항)
-  final VoidCallback? onDeleteSuccess;
+  final VoidCallback? onDeleteSuccess; // 삭제 성공 시 실행할 콜백
 
   const ItineraryCard({
     super.key,
@@ -52,7 +51,7 @@ class ItineraryCard extends StatelessWidget {
       await supabase
           .from('Itinerary')
           .delete()
-          .eq('itinerary_id', itinerary.id); // PK 이름 정확히 확인!
+          .eq('itinerary_id', itinerary.id);
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -74,9 +73,11 @@ class ItineraryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     // 현재 로그인한 유저 ID 확인
     final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+
+    // 내가 작성한 글인지 확인 (삭제 버튼 표시용)
     final isMyPost = currentUserId != null && currentUserId == itinerary.userId;
 
-    // 날짜 포맷팅 (예: 2024-12-01 -> 12/1)
+    // 날짜 포맷팅
     final dateStr = _formatDateRange(itinerary.startDate, itinerary.endDate);
 
     return GestureDetector(
@@ -109,6 +110,7 @@ class ItineraryCard extends StatelessWidget {
                     itinerary.coverImageUrl!,
                     width: 100,
                     height: 100,
+                    // 성능 최적화: 작은 사이즈로 캐싱
                     cacheWidth: 300,
                     fit: BoxFit.cover,
                     errorBuilder: (context, error, stackTrace) {
@@ -129,7 +131,7 @@ class ItineraryCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 16),
 
-                // (2) 텍스트 정보 영역 (오버플로우 방지 핵심 구역)
+                // (2) 텍스트 정보 영역
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -144,7 +146,7 @@ class ItineraryCard extends StatelessWidget {
                               fontWeight: FontWeight.bold
                           ),
                           maxLines: 1,
-                          overflow: TextOverflow.ellipsis, // 길면 ... 처리
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -169,7 +171,7 @@ class ItineraryCard extends StatelessWidget {
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Row(
-                              mainAxisSize: MainAxisSize.min, // 내용물 크기만큼만 차지
+                              mainAxisSize: MainAxisSize.min,
                               children: [
                                 const Icon(Icons.calendar_today, size: 12, color: Colors.pinkAccent),
                                 const SizedBox(width: 4),
@@ -186,7 +188,7 @@ class ItineraryCard extends StatelessWidget {
                           ),
                           const SizedBox(width: 8),
 
-                          // 테마 배지 (길어질 경우 대비 Flexible 사용)
+                          // 테마 배지
                           if (itinerary.theme != null)
                             Flexible(
                               child: Container(
@@ -210,7 +212,7 @@ class ItineraryCard extends StatelessWidget {
                       // 작성자 + 참여 멤버 리스트
                       Row(
                         children: [
-                          // 1. 작성자 (Crown 아이콘이나 굵은 글씨로 강조 가능)
+                          // 1. 작성자
                           _buildAvatar(itinerary.author),
                           const SizedBox(width: 6),
                           Flexible(
@@ -222,12 +224,13 @@ class ItineraryCard extends StatelessWidget {
                             ),
                           ),
 
+                          // 2. 멤버 리스트 (있을 때만 표시)
                           if (itinerary.members.isNotEmpty) ...[
                             const SizedBox(width: 8),
                             Container(width: 1, height: 12, color: Colors.grey[300]), // 구분선
                             const SizedBox(width: 8),
 
-                            // 멤버 리스트 (최대 3명까지만 아이콘으로 표시)
+                            // 최대 3명까지만 아이콘으로 표시
                             ...itinerary.members.take(3).map((member) => Padding(
                               padding: const EdgeInsets.only(right: 4),
                               child: _buildAvatar(member),
@@ -244,26 +247,26 @@ class ItineraryCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 10),
 
-                      // 하단 통계 아이콘들 (가로 스크롤로 오버플로우 원천 차단)
+                      // 하단 통계 아이콘들 (실제 데이터 반영)
                       SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: Row(
                           children: [
-                            // 실제 장소 개수 (placeCount)
+                            // 장소 수
                             _buildStatItem(
                                 Icons.map_outlined,
                                 "${itinerary.placeCount} stops"
                             ),
                             const SizedBox(width: 12),
 
-                            // 실제 좋아요 개수 (likeCount)
+                            // 좋아요 수
                             _buildStatItem(
                                 Icons.favorite_border,
                                 "${itinerary.likeCount}"
                             ),
                             const SizedBox(width: 12),
 
-                            // 실제 조회수 (viewCount - 기존 DB 컬럼)
+                            // 조회수
                             _buildStatItem(
                                 Icons.remove_red_eye_outlined,
                                 "${itinerary.viewCount}"
@@ -281,9 +284,9 @@ class ItineraryCard extends StatelessWidget {
           // 2. 삭제 버튼 (내가 쓴 글일 때만 우측 상단 표시)
           if (isMyPost)
             Positioned(
-              top: 4, // 상단 여백 조금 줌
-              right: 4, // 우측 여백 조금 줌
-              child: Material( // 터치 효과(Ripple)를 위해 Material로 감쌈
+              top: 4,
+              right: 4,
+              child: Material(
                 color: Colors.transparent,
                 child: InkWell(
                   borderRadius: BorderRadius.circular(20),
@@ -304,7 +307,7 @@ class ItineraryCard extends StatelessWidget {
     );
   }
 
-  // 내부에서 쓰는 작은 함수들
+  // 내부 헬퍼 함수: 통계 아이콘
   Widget _buildStatItem(IconData icon, String text) {
     return Row(
       children: [
@@ -315,10 +318,10 @@ class ItineraryCard extends StatelessWidget {
     );
   }
 
-  // 프로필 이미지 위젯 (작성자/멤버 공용)
+  // 내부 헬퍼 함수: 프로필 이미지
   Widget _buildAvatar(Author? author) {
     return CircleAvatar(
-      radius: 9, // 크기 살짝 키움
+      radius: 9,
       backgroundColor: Colors.grey[200],
       backgroundImage: author?.profileImage != null
           ? NetworkImage(author!.profileImage!)
@@ -329,6 +332,7 @@ class ItineraryCard extends StatelessWidget {
     );
   }
 
+  // 내부 헬퍼 함수: 날짜 포맷
   String _formatDateRange(DateTime? start, DateTime? end) {
     if (start == null) return "Date TBD";
     String startStr = "${start.month}/${start.day}";
