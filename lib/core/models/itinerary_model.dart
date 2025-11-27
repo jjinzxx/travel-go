@@ -1,3 +1,4 @@
+// 1. 작성자 정보 (User 테이블 매핑)
 class Author {
   final String name;
   final String? profileImage;
@@ -6,27 +7,29 @@ class Author {
 
   factory Author.fromJson(Map<String, dynamic> json) {
     return Author(
-      name: json['name'] ?? 'Unknown User',
+      // DB 컬럼명: name (또는 nickname), profile_image_url
+      name: json['name'] ?? json['nickname'] ?? 'Unknown User',
       profileImage: json['profile_image_url'],
     );
   }
 }
 
+// 2. 메인 여행 일정 (Itinerary 테이블 매핑)
 class Itinerary {
   final int id;
   final String userId;
   final String title;
   final String? description;
-  final String? coverImageUrl; 
+  final String? coverImageUrl; // 이미지 URL
   final DateTime? startDate;
   final DateTime? endDate;
   final String? theme;
   final int viewCount;
-  final int likeCount;
-  final int placeCount;
-  final String postOption;   
-  final Author? author;      
-  final List<Author> members; 
+  final int likeCount;         // 좋아요 수 (post_like)
+  final int placeCount;        // 장소 수 (ItineraryPlace 카운트)
+  final String postOption;     // 'public', 'shared', 'private'
+  final Author? author;        // 작성자 정보
+  final List<Author> members;  // 참여 멤버 리스트
 
   Itinerary({
     required this.id,
@@ -46,9 +49,11 @@ class Itinerary {
   });
 
   factory Itinerary.fromJson(Map<String, dynamic> json) {
+    // 멤버 리스트 파싱 (ItineraryMember -> Users Join 결과)
     var membersList = <Author>[];
     if (json['ItineraryMember'] != null) {
       membersList = (json['ItineraryMember'] as List).map((m) {
+        // ItineraryMember 안에 nested된 Users 정보를 가져옴
         return Author.fromJson(m['Users']);
       }).toList();
     }
@@ -58,32 +63,41 @@ class Itinerary {
       userId: json['user_id'],
       title: json['title'] ?? '',
       description: json['description'],
+
+      // DB 컬럼명: Itinerary_image_url
       coverImageUrl: json['Itinerary_image_url'],
+
       startDate: json['start_date'] != null ? DateTime.parse(json['start_date']) : null,
       endDate: json['end_date'] != null ? DateTime.parse(json['end_date']) : null,
       theme: json['theme'],
       viewCount: json['view_count'] ?? 0,
-      likeCount: (json['ItineraryLikes'] as List?)?.isNotEmpty == true ? json['ItineraryLikes'][0]['count'] as int : 0,
-      placeCount: (json['ItineraryPlace'] as List?)?.isNotEmpty == true ? json['ItineraryPlace'][0]['count'] as int : 0,
 
-      // JSON의 'post_option' 값을 Dart의 postOption 변수에 저장, 값이 없으면 안전하게 'private'을 기본값으로 사용
+      // DB 컬럼명: post_like (기본값 0)
+      likeCount: json['post_like'] ?? 0,
+
+      // 장소 개수 (Count 쿼리 결과: [{'count': 5}])
+      placeCount: (json['ItineraryPlace'] as List?)?.isNotEmpty == true
+          ? json['ItineraryPlace'][0]['count'] as int
+          : 0,
+
       postOption: json['post_option'] ?? 'private',
 
+      // 작성자 정보 매핑
       author: json['Users'] != null ? Author.fromJson(json['Users']) : null,
-      members: membersList, // 멤버 리스트 매핑
+      members: membersList,
     );
   }
 }
 
-// 장소 정보 (DB의 'Place' 테이블)
+// 3. 순수한 장소 정보 (Place 테이블 매핑)
 class Place {
   final int id;
-  final String name;
+  final String name; // 화면 표시용 대표 이름
   final String? nameKr;
   final String? nameEn;
   final String? description;
-  final String? description_en;
-  final String? description_kr;
+  final String? descriptionEn;
+  final String? descriptionKr;
   final String? category;
 
   Place({
@@ -92,31 +106,36 @@ class Place {
     this.nameKr,
     this.nameEn,
     this.description,
-    this.description_en,
-    this.description_kr,
+    this.descriptionEn,
+    this.descriptionKr,
     this.category,
   });
 
   factory Place.fromJson(Map<String, dynamic> json) {
+    // 이름 우선순위: 영어 > 한글 > 기본 name > Unknown
+    final englishName = json['name_en'] as String?;
+    final koreanName = json['name_kr'] as String?;
+    final defaultName = json['name'] as String?;
+
     return Place(
       id: json['place_id'],
-      name: json['name_en'] ?? json['name_kr'] ?? json['name'] ?? 'Unknown',
-      nameKr: json['name_kr'],
-      nameEn: json['name_en'],
-      description: json['description_en']?? json['description_kr'] ?? json['description'] ?? 'Unknown',
-      description_en: json['description_en'],
-      description_kr: json['description_kr'],
+      name: englishName ?? koreanName ?? defaultName ?? 'Unknown Place',
+      nameKr: koreanName,
+      nameEn: englishName,
+      description: json['description_en'] ?? json['description_kr'] ?? json['description'] ?? 'No description',
+      descriptionEn: json['description_en'],
+      descriptionKr: json['description_kr'],
       category: json['category'],
     );
   }
 }
 
-// 일정에 등록된 장소 항목 (DB의 'ItineraryPlace' 테이블 + Join된 Place)
+// 4. 일정에 등록된 장소 항목 (ItineraryPlace 테이블 + Join된 Place)
 class ItineraryItem {
-  final int routeId;      // 고유 ID (PK)
-  final int itineraryId;  // 어느 여행인지
-  final Place? place;     // 어떤 장소인지 (Place 객체가 여기 쏙 들어감)
-  final int dayId;        // 몇 일차인지 (Day 1, Day 2...)
+  final int routeId;      // ItineraryPlace PK
+  final int itineraryId;
+  final Place? place;     // 장소 정보 객체
+  final int dayId;
   final int dayNum;       // 몇 일차인지 (1, 2, 3...)
 
   ItineraryItem({
@@ -128,21 +147,24 @@ class ItineraryItem {
   });
 
   factory ItineraryItem.fromJson(Map<String, dynamic> json) {
+    // ItineraryDay와 Join되어 있다면 day_num을 가져옴
     int parsedDayNum = 1;
     if (json['ItineraryDay'] != null) {
       parsedDayNum = json['ItineraryDay']['day_num'] ?? 1;
     }
 
     return ItineraryItem(
-      routeId: json['route_id'], // itinerary_place 테이블의 PK
+      routeId: json['route_id'],
       itineraryId: json['itinerary_id'],
       dayId: json['day_id'] ?? 1,
       dayNum: parsedDayNum,
+      // Place 정보 매핑
       place: json['Place'] != null ? Place.fromJson(json['Place']) : null,
     );
   }
 }
 
+// 5. 지역 정보 (Region 테이블 매핑)
 class Region {
   final int id;
   final String nameEn;
