@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:project1/core/services/place_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:project1/core/models/itinerary_model.dart';
-import 'package:project1/core/services/itinerary_service.dart'; // ✅ 서비스 import
+import 'package:project1/core/services/itinerary_service.dart';
 import 'package:project1/features/itinerary/pages/itinerary_modify_page.dart';
+import 'package:project1/features/place/pages/place_detail_page.dart';
 
 class ItineraryDetailPage extends StatefulWidget {
   final Itinerary itinerary;
@@ -14,8 +16,8 @@ class ItineraryDetailPage extends StatefulWidget {
 }
 
 class _ItineraryDetailPageState extends State<ItineraryDetailPage> {
-  // ✅ 서비스 인스턴스
   final _service = ItineraryService();
+  final _placeService = PlaceService();
 
   late Itinerary _itinerary;
 
@@ -27,6 +29,7 @@ class _ItineraryDetailPageState extends State<ItineraryDetailPage> {
   bool _isPlacesLoading = true;
   int _totalDays = 1;
   bool _canEdit = false;
+  bool _isDescriptionExpanded = false;
 
   @override
   void initState() {
@@ -288,11 +291,14 @@ class _ItineraryDetailPageState extends State<ItineraryDetailPage> {
   }
 
   // --- [Dialogs Section] ---
-
   void _showAddPlaceDialog(int dayNum) {
     final searchController = TextEditingController();
-    List<Place> searchResults = [];
+
+    List<Place> myPlaces = [];      // 내 장소
+    List<Place> searchResults = []; // 검색 결과
+
     bool isSearching = false;
+    bool isSearchMode = false;
 
     showModalBottomSheet(
       context: context,
@@ -301,138 +307,168 @@ class _ItineraryDetailPageState extends State<ItineraryDetailPage> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return Padding(
-              padding: EdgeInsets.only(
+        return StatefulBuilder(builder: (context, setModalState) {
+
+          // 초기화: 내 장소 가져오기
+          if (myPlaces.isEmpty && !isSearchMode) {
+            final userId = Supabase.instance.client.auth.currentUser?.id;
+            if (userId != null) {
+              _placeService.fetchMyBookmarkedPlaces(userId).then((places) {
+                if (context.mounted) {
+                  setModalState(() {
+                    myPlaces = places;
+                  });
+                }
+              });
+            }
+          }
+
+          final displayList = isSearchMode ? searchResults : myPlaces;
+
+          return Padding(
+            padding: EdgeInsets.only(
                 bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-                top: 20,
-                left: 20,
-                right: 20,
-              ),
-              child: Container(
-                height: 500,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      "Add Place to Day $dayNum",
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: searchController,
-                            decoration: InputDecoration(
-                              hintText: "Search places...",
-                              prefixIcon: const Icon(Icons.search),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              filled: true,
-                              fillColor: Colors.grey[50],
-                              contentPadding: EdgeInsets.zero,
-                            ),
-                            onSubmitted: (_) async {
-                              if (searchController.text.isEmpty) return;
-                              setModalState(() => isSearching = true);
-                              await _searchPlaces(searchController.text, (
-                                results,
-                              ) {
-                                setModalState(() {
-                                  searchResults = results;
-                                  isSearching = false;
-                                });
+                top: 20, left: 20, right: 20
+            ),
+            child: Container(
+              height: 500,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                      isSearchMode ? "Search Results" : "My Saved Places",
+                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)
+                  ),
+                  const SizedBox(height: 16),
+
+                  // 검색창
+                  Row(children: [
+                    Expanded(child: TextField(
+                      controller: searchController,
+                      decoration: InputDecoration(
+                          hintText: "Search places...",
+                          prefixIcon: const Icon(Icons.search),
+                          suffixIcon: searchController.text.isNotEmpty
+                              ? IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              searchController.clear();
+                              setModalState(() {
+                                isSearchMode = false;
+                                searchResults = [];
                               });
                             },
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        ElevatedButton(
-                          onPressed: () async {
-                            if (searchController.text.isEmpty) return;
-                            setModalState(() => isSearching = true);
-                            await _searchPlaces(searchController.text, (
-                              results,
-                            ) {
-                              setModalState(() {
-                                searchResults = results;
-                                isSearching = false;
-                              });
-                            });
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.black,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                          ) : null,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          filled: true, fillColor: Colors.grey[50], contentPadding: EdgeInsets.zero
+                      ),
+                      onChanged: (value) {
+                        setModalState(() { isSearchMode = value.isNotEmpty; });
+                      },
+                      onSubmitted: (value) async {
+                        if (value.isEmpty) return;
+                        setModalState(() => isSearching = true);
+                        await _service.searchPlaces(value).then((results) {
+                          setModalState(() { searchResults = results; isSearching = false; });
+                        });
+                      },
+                    )),
+                    const SizedBox(width: 8),
+                    ElevatedButton(
+                      onPressed: () async {
+                        if (searchController.text.isEmpty) return;
+                        setModalState(() => isSearching = true);
+                        await _service.searchPlaces(searchController.text).then((results) {
+                          setModalState(() {
+                            searchResults = results;
+                            isSearching = false;
+                            isSearchMode = true;
+                          });
+                        });
+                      },
+                      style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.black,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
+                      ),
+                      child: const Text("Search", style: TextStyle(color: Colors.white)),
+                    ),
+                  ]),
+                  const SizedBox(height: 16),
+
+                  // 리스트 보여주기
+                  Expanded(
+                    child: isSearching
+                        ? const Center(child: CircularProgressIndicator())
+                        : displayList.isEmpty
+                        ? Center(
+                      child: Text(
+                        isSearchMode ? "No places found." : "No saved places yet.\nTry searching!",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.grey[500]),
+                      ),
+                    )
+                        : ListView.builder(
+                      itemCount: displayList.length,
+                      itemBuilder: (context, index) {
+                        final place = displayList[index];
+                        return ListTile(
+                          contentPadding: EdgeInsets.zero,
+
+                          // 아이콘 대신 이미지 표시
+                          leading: Container(
+                            width: 48, height: 48,
+                            decoration: BoxDecoration(
+                              color: Colors.grey[200],
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: place.imageUrl != null
+                                  ? Image.network(
+                                place.imageUrl!,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) {
+                                  // 이미지 로드 실패 시 아이콘 보여줌
+                                  return Icon(
+                                    isSearchMode ? Icons.place : Icons.bookmark,
+                                    color: Colors.grey,
+                                  );
+                                },
+                              )
+                              // 이미지가 없으면(null) 기존 로직대로 아이콘 표시
+                                  : Icon(
+                                  isSearchMode ? Icons.place : Icons.bookmark,
+                                  color: isSearchMode ? const Color(0xFF9E003F) : Colors.blueAccent
+                              ),
                             ),
                           ),
-                          child: const Text(
-                            "Search",
-                            style: TextStyle(color: Colors.white),
+
+                          title: Text(
+                            (place.nameEn != null && place.nameKr != null)
+                                ? "${place.nameEn} (${place.nameKr})"
+                                : place.name,
+                            style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    Expanded(
-                      child: isSearching
-                          ? const Center(child: CircularProgressIndicator())
-                          : ListView.builder(
-                              itemCount: searchResults.length,
-                              itemBuilder: (context, index) {
-                                final place = searchResults[index];
-                                return ListTile(
-                                  contentPadding: EdgeInsets.zero,
-                                  leading: Container(
-                                    width: 48,
-                                    height: 48,
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey[100],
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: const Icon(
-                                      Icons.place,
-                                      color: Color(0xFF9E003F),
-                                    ),
-                                  ),
-                                  title: Text(
-                                    (place.nameEn != null &&
-                                            place.nameKr != null)
-                                        ? "${place.nameEn} (${place.nameKr})"
-                                        : place.name,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  subtitle: Text(
-                                    place.category ??
-                                        place.description ??
-                                        "No details",
-                                  ),
-                                  trailing: IconButton(
-                                    icon: const Icon(
-                                      Icons.add_circle_outline,
-                                      color: Color(0xFF9E003F),
-                                    ),
-                                    onPressed: () =>
-                                        _addPlaceToItinerary(place, dayNum),
-                                  ),
-                                );
-                              },
+                          subtitle: Padding(
+                            padding: const EdgeInsets.only(top: 4.0),
+                            child: ExpandableDescription(
+                              text: place.category ?? place.description ?? "No details",
+                              maxLines: 1, // 검색 결과는 좁으니까 1줄만 보여주고 더보기
                             ),
+                          ),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.add_circle_outline, color: Color(0xFF9E003F)),
+                            onPressed: () => _addPlaceToItinerary(place, dayNum),
+                          ),
+                        );
+                      },
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            );
-          },
-        );
+            ),
+          );
+        });
       },
     );
   }
@@ -569,6 +605,7 @@ class _ItineraryDetailPageState extends State<ItineraryDetailPage> {
     final isPublic = _itinerary.postOption == 'public';
     final currentUserId = Supabase.instance.client.auth.currentUser?.id;
     final isOwner = currentUserId != null && currentUserId == _itinerary.userId;
+    final totaldayStr = _totalDays > 1 ? '$_totalDays days' : '1 day';
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
@@ -789,13 +826,18 @@ class _ItineraryDetailPageState extends State<ItineraryDetailPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      _buildTag(Icons.calendar_today, dateStr, isPink: true),
-                      const SizedBox(width: 12),
-                      if (_itinerary.theme != null)
-                        _buildTag(null, _itinerary.theme!, isPink: false),
-                    ],
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal, // 가로 스크롤 활성화
+                    child: Row(
+                      children: [
+                        _buildTag(Icons.calendar_today, dateStr, isPink: true),
+                        const SizedBox(width: 12),
+                        _buildTag(Icons.access_time, totaldayStr, isPink: false),
+                        const SizedBox(width: 12),
+                        if (_itinerary.theme != null)
+                          _buildTag(null, _itinerary.theme!, isPink: false),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 20),
                   Text(
@@ -925,34 +967,42 @@ class _ItineraryDetailPageState extends State<ItineraryDetailPage> {
           const SliverToBoxAdapter(child: SizedBox(height: 80)),
         ],
       ),
-      floatingActionButton: _canEdit
-          ? FloatingActionButton.extended(
-              onPressed: () => _showAddPlaceDialog(1), // 기본 Day 1 추가
-              backgroundColor: const Color(0xFF9E003F),
-              icon: const Icon(Icons.add_location_alt, color: Colors.white),
-              label: const Text(
-                "Add Place",
-                style: TextStyle(color: Colors.white),
-              ),
-            )
-          : null,
     );
   }
 
-  // --- [Helper Widgets (디자인 유지)] ---
+  // --- [Helper Widgets] ---
 
+  // 리스트 아이템 감싸는 위젯
   Widget _buildPlaceItemWrapper(int index, ItineraryItem item) {
-    return Container(
-      color: Colors.white,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-      child: _buildPlaceItem(
-        index,
-        item.place?.name ?? "Unknown Place",
-        item.place?.description ?? "No description",
+    return GestureDetector(
+      // 장소 클릭 시 상세 페이지로 이동
+      onTap: () {
+        if (item.place != null) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => PlaceDetailPage(place: item.place!),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Place information is missing.")),
+          );
+        }
+      },
+      child: Container(
+        color: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        child: _buildPlaceItem(
+          index,
+          item.place?.name ?? "Unknown Place",
+          item.place?.description ?? "No description",
+        ),
       ),
     );
   }
 
+  // 장소 아이템 카드
   Widget _buildPlaceItem(int index, String title, String desc) {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -962,6 +1012,7 @@ class _ItineraryDetailPageState extends State<ItineraryDetailPage> {
         border: Border.all(color: Colors.grey.shade200),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start, // 위쪽 정렬 필수
         children: [
           Container(
             width: 32,
@@ -992,10 +1043,9 @@ class _ItineraryDetailPageState extends State<ItineraryDetailPage> {
                   ),
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  desc,
-                  style: TextStyle(fontSize: 14, color: Colors.grey[500]),
-                ),
+
+                // ExpandableDescription 사용
+                ExpandableDescription(text: desc),
               ],
             ),
           ),
@@ -1099,5 +1149,62 @@ class _ItineraryDetailPageState extends State<ItineraryDetailPage> {
     }
     String endStr = "${end.month}/${end.day}";
     return "$startStr ~ $endStr";
+  }
+}
+
+class ExpandableDescription extends StatefulWidget {
+  final String text;
+  final int maxLines;
+
+  const ExpandableDescription({
+    super.key,
+    required this.text,
+    this.maxLines = 2, // 기본적으로 2줄만 보여줌
+  });
+
+  @override
+  State<ExpandableDescription> createState() => _ExpandableDescriptionState();
+}
+
+class _ExpandableDescriptionState extends State<ExpandableDescription> {
+  bool _isExpanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    // 텍스트가 짧으면 그냥 보여줌
+    if (widget.text.length < 60) {
+      return Text(
+        widget.text,
+        style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          widget.text,
+          style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+          maxLines: _isExpanded ? null : widget.maxLines,
+          overflow: _isExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
+        ),
+        const SizedBox(height: 4),
+        GestureDetector(
+          onTap: () {
+            setState(() {
+              _isExpanded = !_isExpanded;
+            });
+          },
+          child: Text(
+            _isExpanded ? "Show Less" : "Read More",
+            style: const TextStyle(
+              color: Color(0xFF9E003F),
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }
