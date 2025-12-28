@@ -1,6 +1,6 @@
 <div align="center">
 
-![header](https://capsule-render.vercel.app/api?type=Waving&color=gradient&height=260&section=header&text=Travel%20Go&fontSize=80&fontColor=ffffff&fontAlignY=40&desc=AR%20%2B%20AI%20Based%20Travel%20Experience%20for%20Foreigners&descAlignY=60&animation=fadeIn)
+![header](https://capsule-render.vercel.app/api?type=Waving&color=0:A50034,100:C73659&height=280&section=header&text=Travel%20Go&fontSize=80&fontColor=ffffff&fontAlignY=40&desc=AR%20%2B%20AI%20Based%20Travel%20Experience%20for%20Foreigners&descAlignY=60&animation=fadeIn)
 
 
   <img src="https://img.shields.io/badge/Flutter-02569B?style=for-the-badge&logo=flutter&logoColor=white">
@@ -224,6 +224,6 @@ LG Travel+에서 집 안에서 시작한 여행 경험을, Travel Go를 통해 �
 </div>
 <div align="center">
 
-![footer](https://capsule-render.vercel.app/api?type=waving&color=gradient&height=120&section=footer)
+![footer](https://capsule-render.vercel.app/api?type=Waving&color=0:C73659,100:A50034&height=120&section=footer)
 
 </div>
