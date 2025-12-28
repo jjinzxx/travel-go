@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white">
   <br>
   <img src="https://img.shields.io/badge/Google_Maps-4285F4?style=for-the-badge&logo=google-maps&logoColor=white">
-  <img src="https://img.shields.io/badge/AR_Core-00C853?style=for-the-badge&logo=android&logoColor=white">
+  <img src="https://img.shields.io/badge/AR_Location_Viewer-00C853?style=for-the-badge&logo=android&logoColor=white">
   <img src="https://img.shields.io/badge/Vue.js-4FC08D?style=for-the-badge&logo=vue.js&logoColor=white">
   <img src="https://img.shields.io/badge/GitHub_Actions-2088FF?style=for-the-badge&logo=github-actions&logoColor=white">
 
